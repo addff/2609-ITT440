@@ -1,0 +1,242 @@
+import sys
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# ----------------------------------------------------------------------
+# Configuration
+# ----------------------------------------------------------------------
+CATEGORIES = ["Electronics", "Clothing", "Groceries", "Books", "Toys"]
+COLOURS = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#B279A2"]
+VALID_CHARTS = ("bar", "line", "scatter", "pie", "all")
+SEED = 42  # fixed seed so results are repeatable
+
+
+# ----------------------------------------------------------------------
+# Input handling
+# ----------------------------------------------------------------------
+def ask_positive_int(prompt, default):
+    """Ask for a positive integer; fall back to default on empty input."""
+    while True:
+        raw = input(prompt).strip()
+        if raw == "":
+            return default
+        try:
+            value = int(raw)
+            if value >= 2:
+                return value
+            print("  Please enter a whole number of at least 2.")
+        except ValueError:
+            print("  Invalid input. Please enter a whole number.")
+
+
+def ask_chart_type(prompt, default="all"):
+    """Ask for a chart type from the valid options."""
+    while True:
+        raw = input(prompt).strip().lower()
+        if raw == "":
+            return default
+        if raw in VALID_CHARTS:
+            return raw
+        print("  Please choose one of: " + ", ".join(VALID_CHARTS))
+
+
+# ----------------------------------------------------------------------
+# Data generation
+# ----------------------------------------------------------------------
+def generate_category_data(rng):
+    """Sales totals for each category (used by the bar and pie charts)."""
+    values = rng.integers(low=2000, high=10000, size=len(CATEGORIES))
+    return CATEGORIES, values
+
+
+def generate_trend_data(rng, n_points):
+    """A rising trend with seasonal variation and noise (line chart)."""
+    x = np.arange(1, n_points + 1)
+    trend = 3000 + 150 * x
+    seasonal = 800 * np.sin(2 * np.pi * x / 12)
+    noise = rng.normal(0, 250, size=n_points)
+    y = trend + seasonal + noise
+    return x, y
+
+
+def generate_scatter_data(rng, n_points):
+    """Study hours vs exam score with a positive relationship (scatter)."""
+    hours = rng.uniform(0, 10, size=n_points)
+    score = 35 + 6 * hours + rng.normal(0, 6, size=n_points)
+    score = np.clip(score, 0, 100)
+    return hours, score
+
+
+# ----------------------------------------------------------------------
+# Chart functions
+# ----------------------------------------------------------------------
+def draw_bar_chart(categories, values):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    bars = ax.bar(categories, values, color=COLOURS, edgecolor="black")
+    ax.set_title("Sales by Category")
+    ax.set_xlabel("Category")
+    ax.set_ylabel("Sales (units)")
+    ax.grid(axis="y", linestyle="--", alpha=0.5)
+    ax.set_axisbelow(True)
+
+    # Label each bar with its value
+    for bar, value in zip(bars, values):
+        ax.text(bar.get_x() + bar.get_width() / 2, value + 100,
+                str(value), ha="center", va="bottom", fontsize=9)
+
+    fig.tight_layout()
+    fig.savefig("bar.png", dpi=150)
+    return fig
+
+
+def draw_line_chart(x, y):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(x, y, marker="o", color="#4C78A8", linewidth=2, label="Monthly sales")
+
+    # Straight-line trend (least squares fit)
+    slope, intercept = np.polyfit(x, y, 1)
+    ax.plot(x, slope * x + intercept, linestyle="--", color="#E45756",
+            label="Trend line")
+
+    ax.set_title("Monthly Sales Trend")
+    ax.set_xlabel("Month")
+    ax.set_ylabel("Sales (units)")
+    ax.legend()
+    ax.grid(linestyle="--", alpha=0.5)
+
+    fig.tight_layout()
+    fig.savefig("line.png", dpi=150)
+    return fig
+
+
+def draw_scatter_plot(hours, score):
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.scatter(hours, score, color="#54A24B", edgecolor="black", alpha=0.8,
+               label="Student")
+
+    # Trend line to make the relationship clearer
+    slope, intercept = np.polyfit(hours, score, 1)
+    xs = np.linspace(hours.min(), hours.max(), 100)
+    ax.plot(xs, slope * xs + intercept, color="#E45756", linestyle="--",
+            label="Best-fit line")
+
+    ax.set_title("Study Hours vs Score")
+    ax.set_xlabel("Study hours per day")
+    ax.set_ylabel("Exam score")
+    ax.legend()
+    ax.grid(linestyle="--", alpha=0.5)
+
+    fig.tight_layout()
+    fig.savefig("scatter.png", dpi=150)
+    return fig
+
+
+def draw_pie_chart(categories, values):
+    fig, ax = plt.subplots(figsize=(7, 7))
+    ax.pie(values, labels=categories, colors=COLOURS, autopct="%1.1f%%",
+           startangle=90, wedgeprops={"edgecolor": "white"})
+    ax.set_title("Category Share of Total Sales")
+    ax.axis("equal")  # keep the pie circular
+
+    fig.tight_layout()
+    fig.savefig("pie.png", dpi=150)
+    return fig
+
+
+# ----------------------------------------------------------------------
+# Analytics report
+# ----------------------------------------------------------------------
+def print_report(generated, total_points, category_values, hours, score, line_y):
+    print("\n========== DATA VISUALISATION REPORT ==========\n")
+
+    print("Charts generated:")
+    for name, description in generated:
+        print(f"{name:<14}: {description}")
+
+    print(f"\nTotal data points visualised: {total_points}")
+    print("Charts saved as: " + ", ".join(f"{n.split()[0].lower()}.png"
+                                           for n, _ in generated))
+
+    print("\n========== ANALYSIS ==========")
+    if category_values is not None:
+        best = CATEGORIES[int(np.argmax(category_values))]
+        worst = CATEGORIES[int(np.argmin(category_values))]
+        total = int(np.sum(category_values))
+        print(f"Highest category : {best} ({int(np.max(category_values))})")
+        print(f"Lowest category  : {worst} ({int(np.min(category_values))})")
+        print(f"Total sales      : {total}")
+
+    if line_y is not None:
+        change = line_y[-1] - line_y[0]
+        direction = "increased" if change > 0 else "decreased"
+        print(f"Sales trend      : {direction} by {abs(change):.0f} units "
+              f"over the period")
+
+    if hours is not None:
+        r = np.corrcoef(hours, score)[0, 1]
+        strength = "strong" if abs(r) >= 0.7 else "moderate" if abs(r) >= 0.4 else "weak"
+        kind = "positive" if r > 0 else "negative"
+        print(f"Correlation (r)  : {r:.2f} ({strength} {kind} relationship)")
+
+
+# ----------------------------------------------------------------------
+# Main program
+# ----------------------------------------------------------------------
+def main():
+    print("=== Basic Data Visualisation Simulator ===\n")
+
+    n_points = ask_positive_int(
+        "Enter number of data points to generate (example: 12): ", default=12)
+    chart_choice = ask_chart_type(
+        "Choose chart type (bar / line / scatter / pie / all): ")
+
+    rng = np.random.default_rng(SEED)
+    selected = VALID_CHARTS[:-1] if chart_choice == "all" else (chart_choice,)
+
+    generated = []
+    total_points = 0
+    category_values = hours = score = line_y = None
+
+    # Category data is shared by the bar and pie charts
+    if "bar" in selected or "pie" in selected:
+        categories, category_values = generate_category_data(rng)
+
+    if "bar" in selected:
+        draw_bar_chart(categories, category_values)
+        generated.append(("Bar Chart", f"Sales by Category ({len(categories)} categories)"))
+        total_points += len(categories)
+
+    if "line" in selected:
+        x, line_y = generate_trend_data(rng, n_points)
+        draw_line_chart(x, line_y)
+        generated.append(("Line Chart", f"Monthly Sales Trend ({n_points} months)"))
+        total_points += n_points
+
+    if "scatter" in selected:
+        hours, score = generate_scatter_data(rng, n_points)
+        draw_scatter_plot(hours, score)
+        generated.append(("Scatter Plot", f"Study Hours vs Score ({n_points} points)"))
+        total_points += n_points
+
+    if "pie" in selected:
+        draw_pie_chart(categories, category_values)
+        generated.append(("Pie Chart", "Category Share (100%)"))
+        total_points += len(categories)
+
+    print_report(generated, total_points, category_values, hours, score, line_y)
+
+    print("\nDisplaying charts... close the chart windows to exit.")
+    try:
+        plt.show()
+    except Exception as exc:  # e.g. no display available
+        print(f"Could not open a chart window ({exc}). "
+              f"The charts were still saved as image files.")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nProgram cancelled by user.")
+        sys.exit(0)
